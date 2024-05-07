@@ -68,7 +68,7 @@ def make_on_message_callback(
             full_folder_name = timefolders(q_stream_path, datetime.datetime.now(tz=pytz.UTC))
             full_folder_name.mkdir(parents=True, exist_ok=True)
             sqlite_db_path = full_folder_name.joinpath(file_name)
-            print(f'{q_stream_idx=} creating new file {sqlite_db_path}')
+            stdout(f'{q_stream_idx=} | topic={shared_state['configs'][q_stream_idx]['prefix']} |  creating new file {sqlite_db_path}')
             sqlite_connection_r = sqlite3.connect(sqlite_db_path)
             sqlite_cursor_r = sqlite_connection_r.cursor()
             sqlite_cursor_r.execute(
