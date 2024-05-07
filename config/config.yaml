@@ -8,7 +8,8 @@ streams:
     topic: "#"
     prefix: "everything"
     suffix: ""
-    file-rotation-time-seconds: 600
+    # rotate the file every 5 minutes
+    file-rotation-time-seconds: 300
 log-performance: true
 log-performance-stream:
   topic: "hyattic/performance"

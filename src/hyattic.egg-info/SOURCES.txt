@@ -1,0 +1,11 @@
+LICENCE
+README.md
+setup.cfg
+setup.py
+src/hyattic.egg-info/PKG-INFO
+src/hyattic.egg-info/SOURCES.txt
+src/hyattic.egg-info/dependency_links.txt
+src/hyattic.egg-info/entry_points.txt
+src/hyattic.egg-info/requires.txt
+src/hyattic.egg-info/top_level.txt
+tests/test_basic.py

@@ -1,0 +1,9 @@
+attrs
+numpy
+pyyaml
+pytest
+jupyter
+numpy
+pandas
+matplotlib
+gradio

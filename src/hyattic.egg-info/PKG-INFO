@@ -1,0 +1,14 @@
+Metadata-Version: 2.1
+Name: hyattic
+Version: 0.0.0+ea29
+Requires-Python: >=3.8
+License-File: LICENCE
+Requires-Dist: attrs
+Requires-Dist: numpy
+Requires-Dist: pyyaml
+Requires-Dist: pytest
+Requires-Dist: jupyter
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: matplotlib
+Requires-Dist: gradio
