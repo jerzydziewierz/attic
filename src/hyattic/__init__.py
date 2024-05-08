@@ -259,11 +259,15 @@ def run():
     config_path = os.path.abspath(args.config)
     stdout(f'using configuration from: {config_path}')
 
-    with open(config_path, 'r') as stream:
-        try:
-            config = yaml.safe_load(stream)
-        except yaml.YAMLError as exc:
-            stdout(exc)
+    try:
+        with open(config_path, 'r') as stream:
+            try:
+                config = yaml.safe_load(stream)
+            except yaml.YAMLError as exc:
+                stdout(exc)
+    except FileNotFoundError as no_config_file:
+        stdout(f'error: {no_config_file}')
+        exit(1)
 
     stream_count = len(config['streams'])
     stdout(f'got {stream_count} streams')
