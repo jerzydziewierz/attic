@@ -438,7 +438,7 @@ def run():
         # stdout(
         #     f"{elapsed_time_hours=:0.1f} hours, {totalMessageCount=},
         #     {messages_per_second_total=:0.1f}/sec, {messages_per_second_recent=:0.1f}/sec")
-        print('.', end='', )
+        # print('.', end='', )
 
         if performance_client is not None:
             performance_message = dict(
