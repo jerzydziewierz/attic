@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: hyattic
-Version: 0.0.0+9992
+Version: 0.0.0+a246
 Requires-Python: >=3.8
 License-File: LICENCE
 Requires-Dist: attrs
