@@ -1,6 +1,6 @@
 [Unit]
 Description=Attic log server
-After=network.target
+After=network.target mosquitto.service
 
 [Service]
 Type=simple
