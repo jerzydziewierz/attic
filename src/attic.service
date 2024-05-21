@@ -1,5 +1,5 @@
 [Unit]
-Description=Attic log server
+Description=Attic log saver
 After=network.target mosquitto.service
 
 [Service]
