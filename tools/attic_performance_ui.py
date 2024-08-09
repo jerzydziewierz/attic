@@ -81,7 +81,7 @@ with gr.Blocks() as demo:
     with gr.Row():
         elapsed_time = gr.Textbox(label="Elapsed Time (hours)")
         total_messages = gr.Textbox(label="Total Messages")
-        msgs_per_sec_total = gr.Gauge(label="Messages/sec (Total)", minimum=0, maximum=100, show_label=True)
+        msgs_per_sec_total = gr.Number(label="Messages/sec (Total)", value=0, precision=2)
         msgs_per_sec_recent = gr.Textbox(label="Messages/sec (Recent)")
 
     performance_table = gr.Dataframe(
