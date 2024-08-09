@@ -4,6 +4,7 @@ import json
 import time
 import threading
 from datetime import datetime, timezone
+import math
 
 # Global variables to store the latest performance data
 latest_data = {
@@ -45,7 +46,7 @@ def update_stats():
     return (
         f"{latest_data['elapsed_time_hours']:.2f}",
         f"{latest_data['totalMessageCount']}",
-        f"{latest_data['messages_per_second_total']:.2f}",
+        latest_data['messages_per_second_total'],
         f"{latest_data['messages_per_second_recent']:.2f}",
     )
 
@@ -80,7 +81,7 @@ with gr.Blocks() as demo:
     with gr.Row():
         elapsed_time = gr.Textbox(label="Elapsed Time (hours)")
         total_messages = gr.Textbox(label="Total Messages")
-        msgs_per_sec_total = gr.Textbox(label="Messages/sec (Total)")
+        msgs_per_sec_total = gr.Gauge(label="Messages/sec (Total)", minimum=0, maximum=100, show_label=True)
         msgs_per_sec_recent = gr.Textbox(label="Messages/sec (Recent)")
 
     performance_table = gr.Dataframe(
