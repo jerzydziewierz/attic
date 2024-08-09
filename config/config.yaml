@@ -10,7 +10,7 @@ streams:
     suffix: ""
     # rotate the file every 5 minutes
     # note: devel mode: rotate every 3 seconds.
-    file-rotation-time-seconds: 3
+    file-rotation-time-seconds: 30
 log-performance: true
 log-performance-stream:
   topic: "attic/performance"
