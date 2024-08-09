@@ -5,6 +5,7 @@ import time
 import threading
 from datetime import datetime, timezone
 import math
+import plotly.graph_objects as go
 
 # Global variables to store the latest performance data
 latest_data = {
@@ -42,11 +43,37 @@ client.connect("localhost", 1883, 60)
 threading.Thread(target=client.loop_forever, daemon=True).start()
 
 
+def create_gauge(value, max_value=100):
+    fig = go.Figure(go.Indicator(
+        mode = "gauge+number",
+        value = value,
+        domain = {'x': [0, 1], 'y': [0, 1]},
+        title = {'text': "Messages/sec (Total)"},
+        gauge = {
+            'axis': {'range': [None, max_value]},
+            'bar': {'color': "darkblue"},
+            'steps': [
+                {'range': [0, max_value*0.6], 'color': "lightgray"},
+                {'range': [max_value*0.6, max_value*0.8], 'color': "gray"},
+                {'range': [max_value*0.8, max_value], 'color': "darkgray"}
+            ],
+            'threshold': {
+                'line': {'color': "red", 'width': 4},
+                'thickness': 0.75,
+                'value': max_value*0.9
+            }
+        }
+    ))
+    fig.update_layout(height=300)
+    return fig
+
 def update_stats():
+    gauge_value = min(latest_data['messages_per_second_total'], 100)
+    gauge_plot = create_gauge(gauge_value)
     return (
         f"{latest_data['elapsed_time_hours']:.2f}",
         f"{latest_data['totalMessageCount']}",
-        latest_data['messages_per_second_total'],
+        gauge_plot,
         f"{latest_data['messages_per_second_recent']:.2f}",
     )
 
@@ -81,7 +108,7 @@ with gr.Blocks() as demo:
     with gr.Row():
         elapsed_time = gr.Textbox(label="Elapsed Time (hours)")
         total_messages = gr.Textbox(label="Total Messages")
-        msgs_per_sec_total = gr.Number(label="Messages/sec (Total)", value=0, precision=2)
+        msgs_per_sec_total = gr.Plot(label="Messages/sec (Total)")
         msgs_per_sec_recent = gr.Textbox(label="Messages/sec (Recent)")
 
     performance_table = gr.Dataframe(
