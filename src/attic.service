@@ -1,0 +1,12 @@
+[Unit]
+Description=Attic log server
+After=network.target mosquitto.service
+
+[Service]
+Type=simple
+ExecStart=/home/mib07150/git/zfs/git/private/aider-demo-attic/run_attic.sh
+WorkingDirectory=/home/mib07150/git/zfs/git/private/aider-demo-attic/
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

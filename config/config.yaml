@@ -1,0 +1,20 @@
+console-feedback-period-seconds: 3
+data-folder: "/var/attic/data"
+streams:
+  - mqtt-broker-address: "127.0.0.1"
+    mqtt-broker-port: 1883
+    user: ""
+    password: ""
+    topic: "#"
+    prefix: "everything"
+    suffix: ""
+    # rotate the file every 5 minutes
+    # note: devel mode: rotate every 3 seconds.
+    file-rotation-time-seconds: 3
+log-performance: true
+log-performance-stream:
+  topic: "attic/performance"
+  mqtt-broker-address: "127.0.0.1"
+  mqtt-broker-port: 1883
+  user: ""
+  password: ""
