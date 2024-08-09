@@ -110,21 +110,21 @@ def make_on_message_callback(
                     # except if the stop request has been issued, in which case, ignore the message and return.
                     sqlite_cursor = None
                     sqlite_connection = None
-                    shared_state['streams'][q_stream_idx]['stop_request_ack'] = True
+                    shared_state.streams[q_stream_idx]['stop_request_ack'] = True
                     return  # early return (ignores message). Note that such implementation means that it may take forever to exit the program, as it can only exit when a message is received.
             else:  # the cursor is not None, the typical happy case.
                 # load the cursor and connection from the shared state.
-                sqlite_cursor = shared_state['streams'][q_stream_idx]['sqlite_cursor']
-                sqlite_connection = shared_state['streams'][q_stream_idx]['sqlite_connection']
+                sqlite_cursor = shared_state.streams[q_stream_idx]['sqlite_cursor']
+                sqlite_connection = shared_state.streams[q_stream_idx]['sqlite_connection']
 
                 # if the stop request has been issued, make an effort to gracefully stop the database.
                 if shared_state.streams[q_stream_idx]['stop_request']:
                     sqlite_connection.commit()
                     sqlite_cursor.close()
                     sqlite_connection.close()
-                    shared_state['streams'][q_stream_idx]['sqlite_cursor'] = None
-                    shared_state['streams'][q_stream_idx]['sqlite_connection'] = None
-                    shared_state['streams'][q_stream_idx]['stop_request_ack'] = True
+                    shared_state.streams[q_stream_idx]['sqlite_cursor'] = None
+                    shared_state.streams[q_stream_idx]['sqlite_connection'] = None
+                    shared_state.streams[q_stream_idx]['stop_request_ack'] = True
                     return
 
                 # Regular operation. The music doesn't stop! Make an effort to save the data.
@@ -136,8 +136,8 @@ def make_on_message_callback(
                     sqlite_connection.commit()
                     sqlite_cursor.close()
                     sqlite_connection.close()
-                    shared_state['streams'][q_stream_idx]['sqlite_cursor'] = None
-                    shared_state['streams'][q_stream_idx]['sqlite_connection'] = None
+                    shared_state.streams[q_stream_idx]['sqlite_cursor'] = None
+                    shared_state.streams[q_stream_idx]['sqlite_connection'] = None
                     # re-open the log with next file name. This will give us a fresh database connection.
                     sqlite_cursor, sqlite_connection = renew_database_link()
             # at this point, we should have a good sqlite_cursor and sqlite_connection
@@ -146,8 +146,8 @@ def make_on_message_callback(
             payload = msg.payload  # bytes ! important. Do not decode. Store the bytes as-is, as it may be e.g. an avro packet or other binary data.
             timestamp_unix = int(1e6 * time.time())  # microseconds since epoch
             timestamp_iso_string = datetime.datetime.now(tz=pytz.UTC).isoformat(timespec='microseconds')
-            shared_state['streams'][q_stream_idx]['lastRxTimestamp_unix'] = timestamp_unix
-            shared_state['streams'][q_stream_idx]['lastRxTimestamp_iso_string'] = timestamp_iso_string
+            shared_state.streams[q_stream_idx]['lastRxTimestamp_unix'] = timestamp_unix
+            shared_state.streams[q_stream_idx]['lastRxTimestamp_iso_string'] = timestamp_iso_string
             if sqlite_cursor is not None:
                 sqlite_cursor.execute("INSERT INTO data VALUES (?, ?, ?)", (timestamp_unix, topic, payload))
                 # sqlite_connection.commit()  # no need to commit as this is done in the rotation code
@@ -156,15 +156,15 @@ def make_on_message_callback(
                 shared_state.streams[q_stream_idx]['messageCount'] += 1
                 shared_state.streams[q_stream_idx]['process_end_time'] = time.time()
                 # compute idle time
-                q_idle_time = shared_state['streams'][q_stream_idx]['process_start_time'] - \
-                              shared_state['streams'][q_stream_idx]['previous_end_time']
+                q_idle_time = shared_state.streams[q_stream_idx]['process_start_time'] - \
+                              shared_state.streams[q_stream_idx]['previous_end_time']
                 # compute processing time
-                q_processing_time = shared_state['streams'][q_stream_idx]['process_end_time'] - \
-                                    shared_state['streams'][q_stream_idx]['process_start_time']
+                q_processing_time = shared_state.streams[q_stream_idx]['process_end_time'] - \
+                                    shared_state.streams[q_stream_idx]['process_start_time']
                 # store the idle time and processing time
                 # this is so that I can estimate the leftover node capacity.
-                shared_state['streams'][q_stream_idx]['totalIdleTime'] += q_idle_time
-                shared_state['streams'][q_stream_idx]['totalProcessingTime'] += q_processing_time
+                shared_state.streams[q_stream_idx]['totalIdleTime'] += q_idle_time
+                shared_state.streams[q_stream_idx]['totalProcessingTime'] += q_processing_time
 
             else:
                 print(f'{q_stream_idx=} sqlite_cursor is None, ignoring message. This is probably a bug.')
