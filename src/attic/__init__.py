@@ -8,7 +8,7 @@ import time  # for performance measurement
 import datetime  # for storage addressing
 import pytz  # "python time zone" library for precision time zone handling
 import typing  # for type hints
-from typing import Callable, Any
+from typing import Callable, Any, List, Dict
 import pathlib
 from .safetimestring import datetime_to_safestring, safestring_to_datetime, timefolders
 import json
@@ -17,22 +17,38 @@ from paho.mqtt import client as mqtt
 
 stdout = print
 
+class SharedState:
+    def __init__(self):
+        self.totalMessageCount: int = 0
+        self.streams: List[Dict] = []
+        self.configs: List[Dict] = []
+        self.clients: List[mqtt.Client] = []
+
+    def add_stream(self, stream: Dict):
+        self.streams.append(stream)
+
+    def add_config(self, config: Dict):
+        self.configs.append(config)
+
+    def add_client(self, client: mqtt.Client):
+        self.clients.append(client)
+
 # The work function generator, to create the function that will be called "on message" #
 ########################################################################################
 
 def make_on_message_callback(
+        shared_state: SharedState,
         q_stream_idx: int,
         intended_topic: str,
         q_stream_path: str = "",
         log_rotation_time: int = 600):
-    global shared_state
 
-    # at this point, the SharedState['streams'][q_stream_idx]=dict() needs to be already there, created by the caller.
+    # at this point, the SharedState.streams[q_stream_idx]=dict() needs to be already there, created by the caller.
     # this is because this function cannot assume the order in which the threads will be created.
     debug_mode = True
     if debug_mode:
-        stdout(f'{len(shared_state["streams"])=} {q_stream_idx=}')
-    shared_state['streams'][q_stream_idx] = dict(
+        stdout(f'{len(shared_state.streams)=} {q_stream_idx=}')
+    shared_state.streams[q_stream_idx] = dict(
         messageCount=0,
         intendedTopic=intended_topic,
         lastMessage=None,
@@ -50,16 +66,14 @@ def make_on_message_callback(
 
     # closure: captures locals, in particular the q_stream_idx, intendedTopic, q_stream_path, logRotationTime
     def curried_on_message(_1, _2, msg):
-        global shared_state
-        shared_state['streams'][q_stream_idx]['process_previous_start_time'] = \
-            shared_state['streams'][q_stream_idx]['process_start_time']
-        shared_state['streams'][q_stream_idx]['process_start_time'] = time.time()
-        shared_state['streams'][q_stream_idx]['previous_end_time'] = shared_state['streams'][q_stream_idx][
+        shared_state.streams[q_stream_idx]['process_previous_start_time'] = \
+            shared_state.streams[q_stream_idx]['process_start_time']
+        shared_state.streams[q_stream_idx]['process_start_time'] = time.time()
+        shared_state.streams[q_stream_idx]['previous_end_time'] = shared_state.streams[q_stream_idx][
             'process_end_time']
 
         # builds new database connection as needed.
         def renew_database_link() -> typing.Tuple[sqlite3.Cursor, sqlite3.Connection]:
-            global shared_state
             pathlib.Path(q_stream_path).mkdir(parents=True, exist_ok=True)
             safedatestring = datetime_to_safestring(datetime.datetime.now(tz=pytz.UTC))
             file_name = f'{safedatestring}.sqlite'
@@ -68,7 +82,7 @@ def make_on_message_callback(
             full_folder_name = timefolders(q_stream_path, datetime.datetime.now(tz=pytz.UTC))
             full_folder_name.mkdir(parents=True, exist_ok=True)
             sqlite_db_path = full_folder_name.joinpath(file_name)
-            stdout(f'{q_stream_idx=} | topic={shared_state['configs'][q_stream_idx]['prefix']} |  creating new file {sqlite_db_path}')
+            stdout(f'{q_stream_idx=} | topic={shared_state.configs[q_stream_idx]['prefix']} |  creating new file {sqlite_db_path}')
             sqlite_connection_r = sqlite3.connect(sqlite_db_path)
             sqlite_cursor_r = sqlite_connection_r.cursor()
             sqlite_cursor_r.execute(
@@ -78,11 +92,11 @@ def make_on_message_callback(
                 'CREATE INDEX IF NOT EXISTS topics ON data (topic)')
             sqlite_connection_r.commit()
             # save the cursor and connection to the shared state for use by interested parties.
-            shared_state['streams'][q_stream_idx]['sqlite_cursor'] = sqlite_cursor_r
-            shared_state['streams'][q_stream_idx]['sqlite_connection'] = sqlite_connection_r
+            shared_state.streams[q_stream_idx]['sqlite_cursor'] = sqlite_cursor_r
+            shared_state.streams[q_stream_idx]['sqlite_connection'] = sqlite_connection_r
             # important: set the expiration time for the next rotation
             next_rotation_time_r = time.time() + log_rotation_time
-            shared_state['streams'][q_stream_idx]['next_rotation_time'] = next_rotation_time_r
+            shared_state.streams[q_stream_idx]['next_rotation_time'] = next_rotation_time_r
             return sqlite_cursor_r, sqlite_connection_r
 
         try:
@@ -193,37 +207,39 @@ def on_disconnect(client, userdata, flags, reason_code, properties):
 
 # prepare to capture break signal
 ###############################################################################################
-def signal_handler(sig, frame):
-    # unregister itself so that repeated ctrl-c will not trigger this function again.
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    global shared_state
-    # we need a graceful stop so that the data in the sqlite database is not corrupted and readable.
-    # this enables reading partially captured data.
-    stdout('Abort signal received! Attempting a graceful stop, hold on ...')
-    for stream_idx2 in range(len(shared_state['streams'])):
-        try:
-            stdout(f'sending stop signal to {stream_idx2=}...')
-            # note that there must be a mqtt message coming in for the stop request to be processed
-            shared_state['streams'][stream_idx2]['stop_request'] = True
-            while not shared_state['streams'][stream_idx2]['stop_request_ack']:
-                # if ctrl-c is pressed again during this time, the program will exit immediately.
-                time.sleep(0.2)
-                stdout('.', end='', flush=True)
-        except Exception as ex1:
-            stdout(f'error {ex1} when stopping sqlite on {stream_idx2=}, not retrying.')
-            pass
+def signal_handler(shared_state: SharedState):
+    def handler(sig, frame):
+        # unregister itself so that repeated ctrl-c will not trigger this function again.
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        # we need a graceful stop so that the data in the sqlite database is not corrupted and readable.
+        # this enables reading partially captured data.
+        stdout('Abort signal received! Attempting a graceful stop, hold on ...')
+        for stream_idx2 in range(len(shared_state.streams)):
+            try:
+                stdout(f'sending stop signal to {stream_idx2=}...')
+                # note that there must be a mqtt message coming in for the stop request to be processed
+                shared_state.streams[stream_idx2]['stop_request'] = True
+                while not shared_state.streams[stream_idx2]['stop_request_ack']:
+                    # if ctrl-c is pressed again during this time, the program will exit immediately.
+                    time.sleep(0.2)
+                    stdout('.', end='', flush=True)
+            except Exception as ex1:
+                stdout(f'error {ex1} when stopping sqlite on {stream_idx2=}, not retrying.')
+                pass
 
-    for client in shared_state['clients']:
-        try:
-            stdout(f'stopping client {client} ...')
-            client.loop_stop()
-            client.disconnect()
-        except Exception as ex2:
-            stdout(f'error {ex2} when stopping client {client}, not retrying.')
-            pass
+        for client in shared_state.clients:
+            try:
+                stdout(f'stopping client {client} ...')
+                client.loop_stop()
+                client.disconnect()
+            except Exception as ex2:
+                stdout(f'error {ex2} when stopping client {client}, not retrying.')
+                pass
 
-    from sys import exit
-    exit(0)
+        from sys import exit
+        exit(0)
+    
+    return handler
 
 
 def run():
@@ -244,13 +260,7 @@ def run():
     # prepare shared state:
     #########################################################################################
 
-    # note to the purist: I am aware of the GIL. I am not worried about it here:
-    # on my machine, GIL with modification of global state, switches approx. 20e6 times per second,
-    # and the log saver generally does not need to run at super-realtime.
-    # Hence, I am not worried about the performance impact of this code
-
-    global shared_state
-    shared_state = {'totalMessageCount': 0, 'streams': []}
+    shared_state = SharedState()
     lock = threading.Lock()
 
     # load configuration:
@@ -300,13 +310,9 @@ def run():
 
 
     # for each stream, create mqtt client and subscribe to topic
-    shared_state['streams'] = []
-    shared_state['configs'] = []
-    shared_state['clients'] = []
-
     for stream_idx in range(stream_count):
         stream_config = config['streams'][stream_idx]
-        shared_state['configs'].append(stream_config)
+        shared_state.add_config(stream_config)
 
         # prepare path to save the data to:
         folder_prefix = config['streams'][stream_idx]['prefix']
@@ -319,8 +325,8 @@ def run():
         # create the mqtt client and pass on the curried on_message function
 
         mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        shared_state['clients'].append(mqtt_client)
-        shared_state['streams'].append(dict())
+        shared_state.add_client(mqtt_client)
+        shared_state.add_stream(dict())
 
         # TODO: Do not connect here. Connect in the root thread.
         on_connect = make_on_connect([stream_config['topic']])
@@ -330,6 +336,7 @@ def run():
         # this pattern is called "making a closure",
         # that is, a function that returns a function that closes over some variables provided from the outer scope
         this_on_message = make_on_message_callback(
+            shared_state,
             stream_idx,
             intended_topic=stream_config['topic'],
             q_stream_path=stream_path,
@@ -345,7 +352,7 @@ def run():
 
     # final preparation before starting the main loop
     ##############################################################################################
-    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler(shared_state))
     start_time = time.time()
 
     last_message_count = 0
@@ -372,7 +379,7 @@ def run():
 
         current_time = time.time()
         elapsed_time = current_time - start_time
-        totalMessageCount = shared_state['totalMessageCount']
+        totalMessageCount = shared_state.totalMessageCount
         messages_per_second_total = totalMessageCount / elapsed_time
         messages_per_second_recent = (totalMessageCount - last_message_count) / feedback_period
         last_message_count = totalMessageCount
@@ -380,20 +387,20 @@ def run():
         performance_details = []
         # compute idle time to total time ratio, per stream
         # this is important to estimate the leftover node capacity.
-        for stream_idx in range(len(shared_state['streams'])):
-            idle_time = shared_state['streams'][stream_idx]['totalIdleTime']
-            processing_time = shared_state['streams'][stream_idx]['totalProcessingTime']
+        for stream_idx in range(len(shared_state.streams)):
+            idle_time = shared_state.streams[stream_idx]['totalIdleTime']
+            processing_time = shared_state.streams[stream_idx]['totalProcessingTime']
             total_time = idle_time + processing_time
             if total_time > 0:
                 idle_time_ratio = idle_time / total_time
                 utilisation_ratio = 100 * (1.0 - idle_time_ratio)
                 # stdout(f"{stream_idx=} {utilisation_ratio=:06.3f} %")
-                stream_connected = shared_state['clients'][stream_idx].is_connected()
+                stream_connected = shared_state.clients[stream_idx].is_connected()
                 if not stream_connected:
                     stdout(f"stream {stream_idx} is not connected, attempting to reconnect ...")
                     try:
                         # trying to work the client from another thread is risky, do not do this now.
-                        h_client = shared_state['clients'][stream_idx]
+                        h_client = shared_state.clients[stream_idx]
                         stream_config = config['streams'][stream_idx]
                         time.sleep(0.1)
                         h_client.loop_stop()
@@ -426,9 +433,9 @@ def run():
                     stream_prefix=config['streams'][stream_idx]['prefix'],
                     stream_idx=stream_idx,
                     utilisation_ratio=utilisation_ratio,
-                    messages_this_channel=shared_state['streams'][stream_idx]['messageCount'],
-                    last_rx_timestamp_unix=shared_state['streams'][stream_idx]['lastRxTimestamp_unix'],
-                    last_rx_timestamp_iso=shared_state['streams'][stream_idx]['lastRxTimestamp_iso_string'],
+                    messages_this_channel=shared_state.streams[stream_idx]['messageCount'],
+                    last_rx_timestamp_unix=shared_state.streams[stream_idx]['lastRxTimestamp_unix'],
+                    last_rx_timestamp_iso=shared_state.streams[stream_idx]['lastRxTimestamp_iso_string'],
                     is_connected=stream_connected,
                 )
                 performance_details.append(performance_detail)
