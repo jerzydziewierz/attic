@@ -1,103 +1,94 @@
-# !! This is the AIDER demo branch -- not for production.
+# Attic: MQTT-based Data Logging System
 
+Attic is a robust system designed to log sensor data from an MQTT broker to a SQLite database. It's built for efficiency, flexibility, and ease of use in local network environments.
 
-# Attic the sensor data logging system 
+## Key Features
 
-This is a simple system to log sensor data from a MQTT broker to a sqlite database.
+* Efficient data handling: Processes 500 messages/sec using only ~0.5% CPU on modern desktops
+* YAML-based configuration for easy setup and customization
+* Python-based for easy extensibility and custom filtering
+* Self-reporting performance metrics
+* Multi-threaded support for multiple data streams, leveraging multi-core systems
+* Automatic log file rotation for easy data management and transport
+* SQLite database storage, compatible with popular data analysis tools like pandas
 
-* Intended for use in local network
-* Intended for use with small data
-  * 500 messages/sec takes approx. 0.5% of CPU on a modern desktop
-* Configurable using yaml 
-* Hackable in python. If you need a new filter, just write it in python.
-* self-reports it's performance
-* supports multiple streams in separate threads: fully takes advantage of multi-core systems. 
-* However, it is mainly intended to log everything that happened on a given mqtt broker.
-* auto rotates the log files by time, so that they are easily slice able and transportable
-* the log file is a sqlite database, readable by all the popular tools incl. pandas
+## Getting Started
 
+Attic is designed to run as a service, either on the same node as the MQTT broker or on an adjacent node.
 
-# How do I get set up?
+### Installation
 
-It is intended to be ran as a service, either on the same node, or on a node adjecent to the mqtt broker node.
+1. Clone the repository:
+   ```
+   git clone https://github.com/your-repo/attic.git
+   cd attic
+   ```
 
-# Key concepts
+2. Set up the environment:
+   ```
+   ./scripts/setup-dev.sh
+   ```
 
-### "Stream" 
+3. Install the package:
+   ```
+   pip install -e .
+   ```
 
-For a lack of a better name, stream is a single thread that listens to specific topic and then saves the events to it's configured database.
+### Configuration
 
-One stream can listen to a wildcard topic, e.g. `#` or `+/+/+/+`; in this case, the stream will save all the events that match the topic.
+Edit the `config/config.yaml` file to set up your MQTT broker details and data streams.
 
-However, if you have a lot of messages per topic, you may want to use the MQTT's strongest side: the broker will do the load balancing for you.
+### Running Attic
 
-Simply create a stream for each topic, and then you can use a multicore system or even multiple nodes to process the data.
+Run Attic using:
 
-### Log file rotation
+```
+python run_attic.py
+```
 
-Obviously, if you save generated data for a long time, you will have a lot of data. Having very large log files can be problematic.
+For production use, set it up as a system service using the provided `src/attic.service` file.
 
-Here, the problem is addressed by:
- 
-* Placing output of a stream in dedicated folder, as configured in the config file
+## Key Concepts
 
-* Naming each file by its creation time stamp in unix format
+### Streams
 
-* Starting a new file every period, where period is also configured in the config file
+A "stream" in Attic is a single thread that listens to a specific MQTT topic and saves events to its configured database. Streams can listen to wildcard topics (e.g., `#` or `+/+/+/+`) to capture multiple event types.
 
-* preventing the folder clog-up by creating a new folder per day
- 
-### Timestamp
+### Log File Rotation
 
-For this work, i select to use unix epoch time in microseconds,
+Attic manages data growth through automatic log file rotation:
 
-that is, seconds * 1e6
+* Each stream's output is placed in a dedicated folder
+* Files are named by their creation timestamp
+* New files are started at configurable intervals
+* A new folder is created daily to prevent clutter
 
-This is enough of resolution that nearly every message will get a unique timestamp.
+### Timestamp Handling
 
-Note that the "reception_timestamp", is, of course, the local timestamp of the log saver, and not the timestamp of the event that happened at the source.
+Attic uses Unix epoch time in microseconds (seconds * 1e6) for high-resolution event timing. Note that the "reception_timestamp" is the local time of the log saver, not the event source.
 
-# What does it do exactly?
+## Performance Monitoring
 
-I have made an effort to comment the code, as far as practicable, 
+Attic includes a performance monitoring UI built with Gradio. Run it using:
 
-however, since it uses threads, the execution is a bit nonlinear.
+```
+python tools/attic_performance_ui.py
+```
 
-The general idea is as follows:
+This provides real-time insights into message rates, stream utilization, and system status.
 
-1.Read the configuration from config.yaml
+## Future Work
 
-See config.example.yaml for an example. The names of fields in the config should be self-explanatory.
+* Optimize log file rotation for minimal performance impact
+* Add support for Avro packets from MQTT broker for space efficiency
+* Explore porting to async Rust for potential performance gains
 
-2.Set up a global state dict, "SharedState".
+## Contributing
 
-3.Create an "on message" closure function that captures the configuration settings, using a closure-generating-function (`cgf`) named `make_onmessage_callback()`
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-The `cgf` sets up the storage folder, and then defines the closure.
+## License
 
-The resulting closure function is passed on to the mqtt client library.
-
-3.Start the mqtt connection, and pass the closure function to the mqtt client library.
-
-4.The closure function is called by the mqtt client library, in the mqtt client thread, when a message is received and it will:
-
-* Check if the system is in shutdown mode.
-    * if yes, it will attempt to flush the database, and when successful, exit the function early
-* Check if the file rotation timer has expired
-    * if yes, force flushing the messages and close the database. 
-* Check if the database link is open
-    * if not, open it with a new creation timestamp, and store the link in the shared state dict.
-* Add the message to the database, without flushing it. 
-* SQLite decides when to flush the messages -- by default, sqlite flushes the messages to disk every 1000 messages, or every 1 second, whichever comes first.
-
-5.That's it. So simple. Profit!
-
-Generally, this is intended to be run as a system service, forever. However, I have made extra effort to support graceful shutdown so that the data can be collected for short periods of time, and aborted at any time. 
-
-# Future work
-
-* Verify that the log file rotation doesn't slow down the system too much. If that is a problem, the code would probably need to be rebuilt. At this time, it appears fast enough for my needs.
-* Add support for Avro packets coming from the MQTT broker. This would be a good way to save space.
-* Port this to async rust. I have a feeling that this functionality would be a good fit for async rust, and it would be a good learning experience for me.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 
