@@ -4,8 +4,7 @@ import time
 import argparse
 
 
-def on_connect(client, userdata, flags, rc):
-    print(f"Connected with result code {rc}")
+def on_connect(client, userdata, flags, rc, properties=None):
     print(f"Connected with result code {rc}")
 
 
@@ -16,7 +15,7 @@ def main():
     parser.add_argument("--topic", default="test/counter", help="MQTT topic to publish to")
     args = parser.parse_args()
 
-    client = mqtt.Client()
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     client.on_connect = on_connect
 
     client.connect(args.broker, args.port, 60)
