@@ -3,6 +3,7 @@ import paho.mqtt.client as mqtt
 import json
 import time
 import threading
+from datetime import datetime, timezone
 
 # Global variables to store the latest performance data
 latest_data = {
@@ -52,14 +53,22 @@ def update_stats():
 def update_performance_details():
     details = latest_data['performance_details']
     rows = []
+    current_time = datetime.now(timezone.utc)
     for detail in details:
+        last_rx_time = datetime.fromisoformat(detail['last_rx_timestamp_iso'])
+        time_since_last_update = current_time - last_rx_time
+        seconds_since_last_update = time_since_last_update.total_seconds()
+        
+        status = "Connected" if detail['is_connected'] else "Disconnected"
+        warning = "🔴" if seconds_since_last_update > 10 else "🟢"
+        
         rows.append([
             detail['stream_prefix'],
             f"{detail['stream_idx']}",
             f"{detail['utilisation_ratio']:.2f}%",
             f"{detail['messages_this_channel']}",
-            detail['last_rx_timestamp_iso'],
-            "Connected" if detail['is_connected'] else "Disconnected"
+            f"{seconds_since_last_update:.1f}s ago",
+            f"{status} {warning}"
         ])
     return rows
 
@@ -75,7 +84,7 @@ with gr.Blocks() as demo:
         msgs_per_sec_recent = gr.Textbox(label="Messages/sec (Recent)")
 
     performance_table = gr.Dataframe(
-        headers=["Stream Prefix", "Stream Index", "Utilization", "Messages", "Last Received", "Status"],
+        headers=["Stream Prefix", "Stream Index", "Utilization", "Messages", "Time Since Last Update", "Status"],
         label="Performance Details"
     )
 
