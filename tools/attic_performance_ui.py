@@ -16,9 +16,11 @@ latest_data = {
 # MQTT client setup
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
+
 def on_connect(client, userdata, flags, rc, properties=None):
     print(f"Connected with result code {rc}")
     client.subscribe("attic/performance")
+
 
 def on_message(client, userdata, msg):
     global latest_data
@@ -26,6 +28,7 @@ def on_message(client, userdata, msg):
         latest_data = json.loads(msg.payload.decode())
     except json.JSONDecodeError:
         print("Error decoding JSON message")
+
 
 client.on_connect = on_connect
 client.on_message = on_message
@@ -36,6 +39,7 @@ client.connect("localhost", 1883, 60)
 # Start the MQTT client loop in a separate thread
 threading.Thread(target=client.loop_forever, daemon=True).start()
 
+
 def update_stats():
     return (
         f"{latest_data['elapsed_time_hours']:.2f}",
@@ -43,6 +47,7 @@ def update_stats():
         f"{latest_data['messages_per_second_total']:.2f}",
         f"{latest_data['messages_per_second_recent']:.2f}",
     )
+
 
 def update_performance_details():
     details = latest_data['performance_details']
@@ -58,10 +63,11 @@ def update_performance_details():
         ])
     return rows
 
+
 # Gradio interface
 with gr.Blocks() as demo:
     gr.Markdown("# Attic Performance Monitor")
-    
+
     with gr.Row():
         elapsed_time = gr.Textbox(label="Elapsed Time (hours)")
         total_messages = gr.Textbox(label="Total Messages")
