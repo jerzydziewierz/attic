@@ -101,10 +101,10 @@ def make_on_message_callback(
 
         try:
             # the case of the cursor being None is a special case.
-            if shared_state['streams'][q_stream_idx]['sqlite_cursor'] is None:
+            if shared_state.streams[q_stream_idx]['sqlite_cursor'] is None:
                 # create the cursor and connection.
                 # this is because the object must be created and used in the same thread.
-                if not (shared_state['streams'][q_stream_idx]['stop_request']):
+                if not (shared_state.streams[q_stream_idx]['stop_request']):
                     sqlite_cursor, sqlite_connection = renew_database_link()
                 else:
                     # except if the stop request has been issued, in which case, ignore the message and return.
@@ -118,7 +118,7 @@ def make_on_message_callback(
                 sqlite_connection = shared_state['streams'][q_stream_idx]['sqlite_connection']
 
                 # if the stop request has been issued, make an effort to gracefully stop the database.
-                if shared_state['streams'][q_stream_idx]['stop_request']:
+                if shared_state.streams[q_stream_idx]['stop_request']:
                     sqlite_connection.commit()
                     sqlite_cursor.close()
                     sqlite_connection.close()
@@ -129,7 +129,7 @@ def make_on_message_callback(
 
                 # Regular operation. The music doesn't stop! Make an effort to save the data.
                 # but, first, check for rotation time
-                next_rotation_time = shared_state['streams'][q_stream_idx]['next_rotation_time']
+                next_rotation_time = shared_state.streams[q_stream_idx]['next_rotation_time']
                 if time.time() > next_rotation_time:
                     # rotate the log
                     print(f'{q_stream_idx=} rotating log...')
@@ -152,9 +152,9 @@ def make_on_message_callback(
                 sqlite_cursor.execute("INSERT INTO data VALUES (?, ?, ?)", (timestamp_unix, topic, payload))
                 # sqlite_connection.commit()  # no need to commit as this is done in the rotation code
                 # finally, internal performance monitoring.
-                shared_state['totalMessageCount'] += 1
-                shared_state['streams'][q_stream_idx]['messageCount'] += 1
-                shared_state['streams'][q_stream_idx]['process_end_time'] = time.time()
+                shared_state.totalMessageCount += 1
+                shared_state.streams[q_stream_idx]['messageCount'] += 1
+                shared_state.streams[q_stream_idx]['process_end_time'] = time.time()
                 # compute idle time
                 q_idle_time = shared_state['streams'][q_stream_idx]['process_start_time'] - \
                               shared_state['streams'][q_stream_idx]['previous_end_time']
